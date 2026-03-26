@@ -1,0 +1,330 @@
+/**
+ * LNChat 联系人模块
+ */
+
+import { db, STORES } from '../db.js';
+import { generateId, showToast } from '../utils.js';
+
+let container, headerActions;
+let currentTab = 'roles'; // 'roles' | 'user'
+
+export async function init(target, actions) {
+    container = target;
+    headerActions = actions;
+    renderTabs();
+}
+
+function renderTabs() {
+    container.innerHTML = `
+        <div id="contacts-content" style="height: calc(100% - 50px); overflow-y: auto;"></div>
+        <div class="tab-bar" style="height: 50px; display: flex; border-top: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); position: absolute; bottom: 0; width: 100%;">
+            <div class="tab-item" id="tab-roles" style="flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s;">
+                <span style="font-size: 14px;">角色列表</span>
+            </div>
+            <div class="tab-item" id="tab-user" style="flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s;">
+                <span style="font-size: 14px;">我的设定</span>
+            </div>
+        </div>
+    `;
+
+    const updateTabStyles = () => {
+        const rolesTab = document.getElementById('tab-roles');
+        const userTab = document.getElementById('tab-user');
+        
+        if (currentTab === 'roles') {
+            rolesTab.style.color = 'var(--primary-color)';
+            rolesTab.style.fontWeight = 'bold';
+            userTab.style.color = 'var(--text-secondary)';
+            userTab.style.fontWeight = 'normal';
+        } else {
+            rolesTab.style.color = 'var(--text-secondary)';
+            rolesTab.style.fontWeight = 'normal';
+            userTab.style.color = 'var(--primary-color)';
+            userTab.style.fontWeight = 'bold';
+        }
+    };
+
+    document.getElementById('tab-roles').onclick = () => {
+        currentTab = 'roles';
+        updateTabStyles();
+        renderCurrentTab();
+    };
+    document.getElementById('tab-user').onclick = () => {
+        currentTab = 'user';
+        updateTabStyles();
+        renderCurrentTab();
+    };
+
+    updateTabStyles();
+    renderCurrentTab();
+}
+
+async function renderCurrentTab() {
+    const content = document.getElementById('contacts-content');
+    if (currentTab === 'roles') {
+        await renderList(content);
+    } else {
+        await renderUserPersona(content);
+    }
+}
+
+async function renderList(target) {
+    const contacts = await db.getAll(STORES.CONTACTS);
+    
+    headerActions.innerHTML = `
+        <button class="add-btn" id="add-contact-btn" title="添加联系人">＋</button>
+    `;
+    document.getElementById('add-contact-btn').onclick = () => renderForm();
+
+    if (contacts.length === 0) {
+        target.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">👥</div>
+                <p>你的联系人列表空空如也</p>
+                <button id="empty-add-btn">创建第一个角色</button>
+            </div>
+        `;
+        document.getElementById('empty-add-btn').onclick = () => renderForm();
+        return;
+    }
+
+    target.innerHTML = `
+        <div class="list-container" style="padding-bottom: 60px;">
+            ${contacts.map(c => `
+                <div class="item contact-item" data-id="${c.id}">
+                    <div class="avatar">${c.avatar ? `<img src="${c.avatar}">` : '👤'}</div>
+                    <div class="info">
+                        <div class="name">${c.name}</div>
+                        <div class="desc">${c.description || ''}</div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    target.querySelectorAll('.contact-item').forEach(item => {
+        item.onclick = () => renderForm(item.dataset.id);
+    });
+}
+
+async function renderUserPersona(target) {
+    // 迁移旧数据
+    const oldSetting = await db.get(STORES.SETTINGS, 'user_persona');
+    if (oldSetting) {
+        await db.put(STORES.USER_PERSONAS, {
+            id: generateId(),
+            name: oldSetting.name || '默认设定',
+            description: oldSetting.description,
+            createdAt: new Date().toISOString()
+        });
+        await db.delete(STORES.SETTINGS, 'user_persona');
+    }
+
+    const personas = await db.getAll(STORES.USER_PERSONAS);
+    
+    headerActions.innerHTML = `
+        <button class="add-btn" id="add-persona-btn" title="添加用户设定">＋</button>
+    `;
+    document.getElementById('add-persona-btn').onclick = () => renderUserPersonaForm(target);
+
+    if (personas.length === 0) {
+        target.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">👤</div>
+                <p>还没有用户设定</p>
+                <button id="empty-add-persona-btn">创建第一个设定</button>
+            </div>
+        `;
+        document.getElementById('empty-add-persona-btn').onclick = () => renderUserPersonaForm(target);
+        return;
+    }
+
+    target.innerHTML = `
+        <div class="list-container" style="padding-bottom: 60px;">
+            ${personas.map(p => `
+                <div class="item persona-item" data-id="${p.id}">
+                    <div class="avatar">${p.avatar ? `<img src="${p.avatar}">` : '👤'}</div>
+                    <div class="info">
+                        <div class="name">${p.name}</div>
+                        <div class="desc">${p.description || ''}</div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    target.querySelectorAll('.persona-item').forEach(item => {
+        item.onclick = () => renderUserPersonaForm(target, item.dataset.id);
+    });
+}
+
+async function renderUserPersonaForm(target, id = null) {
+    let persona = { name: '', description: '', avatar: '' };
+    if (id) {
+        persona = await db.get(STORES.USER_PERSONAS, id);
+    }
+
+    headerActions.innerHTML = '';
+    
+    target.innerHTML = `
+        <div class="form-container" style="padding: 20px;">
+            <div class="avatar-upload" id="u-avatar-container" title="点击上传头像">
+                ${persona.avatar ? `<img src="${persona.avatar}" id="u-avatar-preview">` : '<div class="upload-placeholder"><span>📸</span><p>上传头像</p></div>'}
+                <input type="file" id="u-avatar-input" accept="image/*" style="display:none">
+            </div>
+            <div class="input-group">
+                <label>设定名称 (如: "默认", "热恋期")</label>
+                <input type="text" id="u-name" value="${persona.name}" placeholder="给这个设定起个名字...">
+            </div>
+            <div class="input-group">
+                <label>用户人设</label>
+                <textarea id="u-desc" rows="8" placeholder="描述你的性格、喜好、身份等...">${persona.description || ''}</textarea>
+            </div>
+            <div class="form-actions">
+                ${id ? `<button class="delete-btn" id="del-persona-btn">删除</button>` : ''}
+                <button class="save-btn" id="save-persona-btn">保存</button>
+                <button class="cancel-btn" id="cancel-persona-btn">取消</button>
+            </div>
+        </div>
+    `;
+
+    const avatarInput = document.getElementById('u-avatar-input');
+    const avatarContainer = document.getElementById('u-avatar-container');
+    avatarContainer.onclick = () => avatarInput.click();
+    
+    avatarInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                persona.avatar = ev.target.result;
+                avatarContainer.innerHTML = `<img src="${persona.avatar}" id="u-avatar-preview">`;
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    
+    document.getElementById('save-persona-btn').onclick = async () => {
+        const name = document.getElementById('u-name').value.trim();
+        const description = document.getElementById('u-desc').value.trim();
+        
+        if (!name) return showToast('请输入名称');
+
+        const newPersona = {
+            ...persona,
+            id: id || generateId(),
+            name,
+            description,
+            updatedAt: new Date().toISOString()
+        };
+        if (!id) newPersona.createdAt = new Date().toISOString();
+        
+        await db.put(STORES.USER_PERSONAS, newPersona);
+        showToast('保存成功');
+        renderUserPersona(target);
+    };
+
+    if (id) {
+        document.getElementById('del-persona-btn').onclick = async () => {
+            if (confirm('确定删除吗？')) {
+                await db.delete(STORES.USER_PERSONAS, id);
+                showToast('已删除');
+                renderUserPersona(target);
+            }
+        };
+    }
+
+    document.getElementById('cancel-persona-btn').onclick = () => renderUserPersona(target);
+}
+
+async function renderForm(id = null) {
+    let contact = { name: '', description: '', temperature: 1.5, avatar: '' };
+    if (id) {
+        contact = await db.get(STORES.CONTACTS, id);
+    }
+
+    headerActions.innerHTML = '';
+    container.innerHTML = `
+        <div class="form-container">
+            <div class="avatar-upload" id="avatar-container" title="点击上传头像">
+                ${contact.avatar ? `<img src="${contact.avatar}" id="avatar-preview">` : '<div class="upload-placeholder"><span>📸</span><p>上传头像</p></div>'}
+                <input type="file" id="avatar-input" accept="image/*" style="display:none">
+            </div>
+            <div class="input-group">
+                <label>角色名称</label>
+                <input type="text" id="c-name" value="${contact.name}" placeholder="给你的角色起个名字...">
+            </div>
+            <div class="input-group">
+                <label>角色人设</label>
+                <textarea id="c-desc" rows="5" placeholder="描述角色的性格、背景和说话风格...">${contact.description || ''}</textarea>
+            </div>
+            <div class="input-group">
+                <label>思维活跃度 (Temperature: ${contact.temperature})</label>
+                <input type="range" id="c-temp" min="0" max="2" step="0.1" value="${contact.temperature}" style="padding: 0; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; appearance: none; outline: none;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                    <span>严谨</span>
+                    <span id="temp-val">${contact.temperature}</span>
+                    <span>创造</span>
+                </div>
+            </div>
+            <div class="form-actions">
+                ${id ? `<button class="delete-btn" id="del-btn">删除角色</button>` : ''}
+                <button class="save-btn" id="save-btn">保存角色</button>
+                <button class="cancel-btn" id="cancel-btn">返回列表</button>
+            </div>
+        </div>
+    `;
+
+    const tempInput = document.getElementById('c-temp');
+    const tempVal = document.getElementById('temp-val');
+    tempInput.oninput = () => {
+        tempVal.textContent = tempInput.value;
+    };
+
+    const avatarInput = document.getElementById('avatar-input');
+    const avatarContainer = document.getElementById('avatar-container');
+    avatarContainer.onclick = () => avatarInput.click();
+    
+    avatarInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                contact.avatar = ev.target.result;
+                avatarContainer.innerHTML = `<img src="${contact.avatar}" id="avatar-preview">`;
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    document.getElementById('save-btn').onclick = async () => {
+        const name = document.getElementById('c-name').value.trim();
+        if (!name) return showToast('请输入名称');
+
+        const newContact = {
+            ...contact,
+            id: id || generateId(),
+            name,
+            description: document.getElementById('c-desc').value,
+            temperature: parseFloat(document.getElementById('c-temp').value),
+            updatedAt: new Date().toISOString()
+        };
+        if (!id) newContact.createdAt = new Date().toISOString();
+
+        await db.put(STORES.CONTACTS, newContact);
+        showToast('保存成功');
+        renderTabs();
+    };
+
+    if (id) {
+        document.getElementById('del-btn').onclick = async () => {
+            if (confirm('确定删除吗？')) {
+                await db.delete(STORES.CONTACTS, id);
+                showToast('已删除');
+                renderList();
+            }
+        };
+    }
+
+    document.getElementById('cancel-btn').onclick = () => renderTabs();
+}
