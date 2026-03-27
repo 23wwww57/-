@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "format": "mix-global-backup",
-  "exportedAt": "2026-03-27T07:13:13.794Z",
+  "exportedAt": "2026-03-27T07:19:03.505Z",
   "exportedBy": "MixApp_GlobalBackup",
   "source": {
     "currentUserId": "1",
@@ -31,7 +31,7 @@
     "totalMemories": 164,
     "totalQzoneFeeds": 6,
     "totalQzoneGuestbook": 6,
-    "totalAlipayBills": 21,
+    "totalAlipayBills": 22,
     "indexedDBTables": 56,
     "localStorageKeys": 284
   },
@@ -13822,8 +13822,14 @@
     },
     "alipay": {
       "balance": {
-        "balance": "5115.96",
+        "balance": "5011.53",
         "transactions": [
+          {
+            "title": "花销",
+            "time": "3月27日 15:17",
+            "amount": -104.43,
+            "type": "expense"
+          },
           {
             "title": "api",
             "time": "3月21日 12:22",
