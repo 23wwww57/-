@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "format": "mix-global-backup",
-  "exportedAt": "2026-03-27T07:04:23.193Z",
+  "exportedAt": "2026-03-27T07:13:13.794Z",
   "exportedBy": "MixApp_GlobalBackup",
   "source": {
     "currentUserId": "1",
@@ -33,7 +33,7 @@
     "totalQzoneGuestbook": 6,
     "totalAlipayBills": 21,
     "indexedDBTables": 56,
-    "localStorageKeys": 280
+    "localStorageKeys": 284
   },
   "data": {
     "user": {
